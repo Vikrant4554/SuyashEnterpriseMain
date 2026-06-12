@@ -11,37 +11,49 @@ import api from "../../api/axios";
 import CustomerForm from "./CustomerForm";
 import ProductForm from "../products/ProductForm";
 import ServiceForm from "../services/ServiceForm";
-
-interface Customer { _id: string; name: string; mobileNumber: string; alternateNumber?: string; address: string; notes?: string; }
-interface Product { _id: string; productName: string; category: string; brand: string; model: string; serialNumber: string; purchaseDate: string; salePrice: number; nextServiceDate: string; }
-interface Service { _id: string; serviceDate: string; workDone: string; problemDescription: string; partsReplaced: string; serviceCharge: number; nextServiceDate: string; productId: { productName: string; serialNumber: string } | null; }
+import { useAppDispatch, useAppSelector } from "../../store/hooks";
+import { store } from "../../store/index";
+import {
+  setCustomerDetailLoading,
+  setCustomerDetail,
+  setCustomerDetailFailed,
+} from "../../store/slices/customersSlice";
 
 export default function CustomerDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [customer, setCustomer] = useState<Customer | null>(null);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [services, setServices] = useState<Service[]>([]);
-  const [loading, setLoading] = useState(true);
+  const dispatch = useAppDispatch();
+  const {
+    currentCustomer: customer,
+    currentProducts: products,
+    currentServices: services,
+    detailStatus,
+  } = useAppSelector((s) => s.customers);
+  const loading = detailStatus !== "succeeded";
+
   const [editOpen, setEditOpen] = useState(false);
   const [productFormOpen, setProductFormOpen] = useState(false);
   const [serviceFormOpen, setServiceFormOpen] = useState(false);
 
-  const load = async () => {
-    setLoading(true);
-    try {
-      const res = await api.get(`/customers/${id}`);
-      setCustomer(res.data.customer);
-      setProducts(res.data.products);
-      setServices(res.data.services);
-    } finally {
-      setLoading(false);
-    }
+  const load = (customerId: string) => {
+    // Skip if the same customer is already loading (StrictMode guard)
+    const st = store.getState().customers;
+    if (st.detailStatus === 'loading' && st.currentId === customerId) return;
+    dispatch(setCustomerDetailLoading(customerId));
+    api.get(`/customers/${customerId}`)
+      .then((res) => dispatch(setCustomerDetail(res.data)))
+      .catch(() => dispatch(setCustomerDetailFailed()));
   };
 
-  useEffect(() => { load(); }, [id]);
+  useEffect(() => {
+    if (id) load(id);
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (loading) return <Box sx={{ display: "flex", justifyContent: "center", mt: 8 }}><CircularProgress /></Box>;
+  if (loading) return (
+    <Box sx={{ display: "flex", justifyContent: "center", mt: 8 }}>
+      <CircularProgress />
+    </Box>
+  );
   if (!customer) return <Typography>Customer not found</Typography>;
 
   return (
@@ -106,7 +118,7 @@ export default function CustomerDetail() {
                   <TableRow>
                     <TableCell colSpan={5} sx={{ textAlign: "center" }}>No products</TableCell>
                   </TableRow>
-                ) : products.map(p => (
+                ) : products.map((p) => (
                   <TableRow key={p._id} hover>
                     <TableCell>
                       <Typography variant="body2" sx={{ fontWeight: 500 }}>{p.productName}</Typography>
@@ -116,7 +128,8 @@ export default function CustomerDetail() {
                     <TableCell>{new Date(p.purchaseDate).toLocaleDateString("en-IN")}</TableCell>
                     <TableCell>₹{p.salePrice}</TableCell>
                     <TableCell>
-                      <Chip size="small"
+                      <Chip
+                        size="small"
                         label={new Date(p.nextServiceDate).toLocaleDateString("en-IN")}
                         color={new Date(p.nextServiceDate) < new Date() ? "error" : "success"}
                       />
@@ -155,12 +168,16 @@ export default function CustomerDetail() {
               <TableRow>
                 <TableCell colSpan={7} sx={{ textAlign: "center" }}>No service history</TableCell>
               </TableRow>
-            ) : services.map(s => (
+            ) : services.map((s) => (
               <TableRow key={s._id} hover>
                 <TableCell>{new Date(s.serviceDate).toLocaleDateString("en-IN")}</TableCell>
                 <TableCell>{s.productId?.productName || "-"}</TableCell>
-                <TableCell sx={{ maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.problemDescription || "-"}</TableCell>
-                <TableCell sx={{ maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.workDone || "-"}</TableCell>
+                <TableCell sx={{ maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {s.problemDescription || "-"}
+                </TableCell>
+                <TableCell sx={{ maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {s.workDone || "-"}
+                </TableCell>
                 <TableCell>{s.partsReplaced || "-"}</TableCell>
                 <TableCell>₹{s.serviceCharge}</TableCell>
                 <TableCell>{new Date(s.nextServiceDate).toLocaleDateString("en-IN")}</TableCell>
@@ -170,9 +187,27 @@ export default function CustomerDetail() {
         </Table>
       </TableContainer>
 
-      <CustomerForm open={editOpen} customer={customer} onClose={() => setEditOpen(false)} onSaved={() => { setEditOpen(false); load(); }} />
-      <ProductForm open={productFormOpen} customerId={customer._id} product={null} onClose={() => setProductFormOpen(false)} onSaved={() => { setProductFormOpen(false); load(); }} />
-      <ServiceForm open={serviceFormOpen} customerId={customer._id} products={products} service={null} onClose={() => setServiceFormOpen(false)} onSaved={() => { setServiceFormOpen(false); load(); }} />
+      <CustomerForm
+        open={editOpen}
+        customer={customer}
+        onClose={() => setEditOpen(false)}
+        onSaved={() => { setEditOpen(false); if (id) load(id); }}
+      />
+      <ProductForm
+        open={productFormOpen}
+        customerId={customer._id}
+        product={null}
+        onClose={() => setProductFormOpen(false)}
+        onSaved={() => { setProductFormOpen(false); if (id) load(id); }}
+      />
+      <ServiceForm
+        open={serviceFormOpen}
+        customerId={customer._id}
+        products={products}
+        service={null}
+        onClose={() => setServiceFormOpen(false)}
+        onSaved={() => { setServiceFormOpen(false); if (id) load(id); }}
+      />
     </Box>
   );
 }

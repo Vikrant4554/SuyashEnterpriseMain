@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Grid,
@@ -23,28 +23,10 @@ import BuildIcon from "@mui/icons-material/Build";
 import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
 import ArrowForwardIosIcon from "@mui/icons-material/ArrowForwardIos";
 import api from "../../api/axios";
+import { useAppDispatch, useAppSelector } from "../../store/hooks";
+import { setDashboardLoading, setDashboardData, setDashboardFailed } from "../../store/slices/dashboardSlice";
+import { store } from "../../store/index";
 import PageContainer from "../../components/PageContainer";
-
-interface Stats {
-  totalCustomers: number;
-  totalProducts: number;
-  totalServices: number;
-  servicesDueThisMonth: number;
-}
-interface RecentService {
-  _id: string;
-  serviceDate: string;
-  workDone: string;
-  serviceCharge: number;
-  customerId: { name: string; mobileNumber: string };
-  productId: { productName: string; serialNumber: string };
-}
-interface UpcomingProduct {
-  _id: string;
-  productName: string;
-  nextServiceDate: string;
-  customerId: { name: string; mobileNumber: string };
-}
 
 const STAT_CARDS = [
   {
@@ -234,26 +216,26 @@ function SectionCard({
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [recentServices, setRecentServices] = useState<RecentService[]>([]);
-  const [upcomingServices, setUpcomingServices] = useState<UpcomingProduct[]>(
-    [],
+  const dispatch = useAppDispatch();
+  const { stats, recentServices, upcomingServices, status } = useAppSelector(
+    (s) => s.dashboard
   );
-  const [loading, setLoading] = useState(true);
+  const loading = status !== "succeeded";
 
   useEffect(() => {
+    // Guard: skip if a request is already in-flight (prevents StrictMode duplicate calls)
+    if (store.getState().dashboard.status === 'loading') return;
+    dispatch(setDashboardLoading());
     Promise.all([
-      api.get("/dashboard/stats"),
-      api.get("/dashboard/recent-services"),
-      api.get("/dashboard/upcoming-services"),
+      api.get('/dashboard/stats'),
+      api.get('/dashboard/recent-services'),
+      api.get('/dashboard/upcoming-services'),
     ])
-      .then(([s, r, u]) => {
-        setStats(s.data);
-        setRecentServices(r.data);
-        setUpcomingServices(u.data);
-      })
-      .finally(() => setLoading(false));
-  }, []);
+      .then(([s, r, u]) =>
+        dispatch(setDashboardData({ stats: s.data, recentServices: r.data, upcomingServices: u.data }))
+      )
+      .catch(() => dispatch(setDashboardFailed()));
+  }, [dispatch]);
 
   const dueColor = (date: string): "error" | "warning" | "success" => {
     const d = new Date(date),

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Box, Typography, TextField, InputAdornment, Card, CardContent, CardActionArea,
@@ -10,8 +10,8 @@ import HomeIcon from "@mui/icons-material/Home";
 import PersonSearchIcon from "@mui/icons-material/PersonSearch";
 import api from "../../api/axios";
 import PageContainer from "../../components/PageContainer";
-
-interface Customer { _id: string; name: string; mobileNumber: string; alternateNumber?: string; address: string; notes?: string; }
+import { useAppDispatch, useAppSelector } from "../../store/hooks";
+import { setSearchLoading, setSearchResults, setSearchFailed, clearSearch } from "../../store/slices/searchSlice";
 
 const AVATAR_COLORS = ["#4F46E5", "#0EA5E9", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6"];
 const avatarColor = (name: string) => AVATAR_COLORS[(name?.charCodeAt(0) || 0) % AVATAR_COLORS.length];
@@ -19,22 +19,22 @@ const initials = (name: string) => name?.split(" ").map(w => w[0]).slice(0, 2).j
 
 export default function Search() {
   const navigate = useNavigate();
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<Customer[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [searched, setSearched] = useState(false);
+  const dispatch = useAppDispatch();
+  const { results, status, searched } = useAppSelector((s) => s.search);
+  const loading = status === "loading";
 
-  const handleSearch = async (val: string) => {
+  const [query, setQuery] = useState("");
+
+  // Clear results when leaving the page
+  useEffect(() => () => { dispatch(clearSearch()); }, [dispatch]);
+
+  const handleSearch = (val: string) => {
     setQuery(val);
-    if (val.length < 2) { setResults([]); setSearched(false); return; }
-    setLoading(true);
-    try {
-      const res = await api.get("/customers/search", { params: { q: val } });
-      setResults(res.data);
-      setSearched(true);
-    } finally {
-      setLoading(false);
-    }
+    if (val.length < 2) { dispatch(clearSearch()); return; }
+    dispatch(setSearchLoading());
+    api.get('/customers/search', { params: { q: val } })
+      .then((res) => dispatch(setSearchResults(res.data)))
+      .catch(() => dispatch(setSearchFailed()));
   };
 
   return (
@@ -86,7 +86,6 @@ export default function Search() {
                     </Box>
                     <Typography variant="subtitle2" sx={{ fontWeight: 700, lineHeight: 1.2 }}>{c.name}</Typography>
                   </Box>
-
                   <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                       <PhoneIcon sx={{ fontSize: 14, color: "text.secondary" }} />

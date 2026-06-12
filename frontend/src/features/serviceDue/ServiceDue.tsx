@@ -7,11 +7,9 @@ import {
 import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
 import api from "../../api/axios";
 import PageContainer from "../../components/PageContainer";
-
-interface Product {
-  _id: string; productName: string; nextServiceDate: string;
-  customerId: { _id: string; name: string; mobileNumber: string; address: string };
-}
+import { useAppDispatch, useAppSelector } from "../../store/hooks";
+import { store } from "../../store/index";
+import { setServiceDueLoading, setServiceDueList, setServiceDueFailed } from "../../store/slices/serviceDueSlice";
 
 const AVATAR_COLORS = ["#4F46E5", "#0EA5E9", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6"];
 const avatarColor = (name: string) => AVATAR_COLORS[(name?.charCodeAt(0) || 0) % AVATAR_COLORS.length];
@@ -19,14 +17,23 @@ const initials = (name: string) => name?.split(" ").map(w => w[0]).slice(0, 2).j
 
 export default function ServiceDue() {
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
+  const { list: products, status } = useAppSelector((s) => s.serviceDue);
+  const loading = status !== "succeeded";
+
   const [filter, setFilter] = useState("month");
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
+
+  const load = (f: string) => {
+    if (store.getState().serviceDue.status === 'loading') return;
+    dispatch(setServiceDueLoading());
+    api.get('/services/due', { params: { filter: f } })
+      .then((res) => dispatch(setServiceDueList(res.data)))
+      .catch(() => dispatch(setServiceDueFailed()));
+  };
 
   useEffect(() => {
-    setLoading(true);
-    api.get("/services/due", { params: { filter } }).then(res => setProducts(res.data)).finally(() => setLoading(false));
-  }, [filter]);
+    load(filter);
+  }, [filter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const dueColor = (date: string): "error" | "warning" | "success" => {
     const d = new Date(date), now = new Date();
@@ -118,9 +125,15 @@ export default function ServiceDue() {
                   </Box>
                 </TableCell>
                 <TableCell><Typography variant="body2">{p.customerId?.mobileNumber}</Typography></TableCell>
-                <TableCell sx={{ maxWidth: 180 }}><Typography variant="body2" sx={{ color: "text.secondary" }} noWrap>{p.customerId?.address}</Typography></TableCell>
+                <TableCell sx={{ maxWidth: 180 }}>
+                  <Typography variant="body2" sx={{ color: "text.secondary" }} noWrap>{p.customerId?.address}</Typography>
+                </TableCell>
                 <TableCell><Typography variant="body2">{p.productName}</Typography></TableCell>
-                <TableCell><Typography variant="body2" sx={{ color: "text.secondary" }}>{new Date(p.nextServiceDate).toLocaleDateString("en-IN")}</Typography></TableCell>
+                <TableCell>
+                  <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                    {new Date(p.nextServiceDate).toLocaleDateString("en-IN")}
+                  </Typography>
+                </TableCell>
                 <TableCell>
                   <Chip size="small" color={dueColor(p.nextServiceDate)} label={dueLabel(p.nextServiceDate)} />
                 </TableCell>

@@ -1,21 +1,8 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Box,
-  Typography,
-  Button,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  IconButton,
-  Pagination,
-  Chip,
-  Skeleton,
-  Tooltip,
+  Box, Typography, Button, Table, TableBody, TableCell, TableContainer,
+  TableHead, TableRow, Paper, IconButton, Pagination, Chip, Skeleton, Tooltip,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
@@ -23,37 +10,31 @@ import PersonIcon from "@mui/icons-material/Person";
 import api from "../../api/axios";
 import ProductForm from "./ProductForm";
 import PageContainer from "../../components/PageContainer";
-
-interface Customer { _id: string; name: string; mobileNumber: string; }
-interface Product {
-  _id: string; productName: string; category: string; brand: string;
-  model: string; serialNumber: string; purchaseDate: string;
-  salePrice: number; nextServiceDate: string; customerId: Customer;
-}
+import { useAppDispatch, useAppSelector } from "../../store/hooks";
+import { store } from "../../store/index";
+import { setProductsLoading, setProductsList, setProductsFailed } from "../../store/slices/productsSlice";
 
 export default function ProductList() {
   const navigate = useNavigate();
-  const [products, setProducts] = useState<Product[]>([]);
-  const [total, setTotal] = useState(0);
+  const dispatch = useAppDispatch();
+  const { list: products, total, pages, status } = useAppSelector((s) => s.products);
+  const loading = status !== "succeeded";
+
   const [page, setPage] = useState(1);
-  const [pages, setPages] = useState(1);
-  const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
-  const [editing, setEditing] = useState<Product | null>(null);
+  const [editing, setEditing] = useState<(typeof products)[0] | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await api.get("/products", { params: { page, limit: 10 } });
-      setProducts(res.data.products);
-      setTotal(res.data.total);
-      setPages(res.data.pages);
-    } finally {
-      setLoading(false);
-    }
-  }, [page]);
+  const load = (p: number) => {
+    if (store.getState().products.status === 'loading') return;
+    dispatch(setProductsLoading());
+    api.get('/products', { params: { page: p, limit: 10 } })
+      .then((res) => dispatch(setProductsList(res.data)))
+      .catch(() => dispatch(setProductsFailed()));
+  };
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load(page);
+  }, [page]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const dueColor = (date: string): "error" | "success" =>
     new Date(date) < new Date() ? "error" : "success";
@@ -72,8 +53,6 @@ export default function ProductList() {
         </Button>
       }
     >
-
-      
       <TableContainer component={Paper}>
         <Table>
           <TableHead>
@@ -93,9 +72,7 @@ export default function ProductList() {
               Array.from({ length: 6 }).map((_, i) => (
                 <TableRow key={i}>
                   {Array.from({ length: 8 }).map((_, j) => (
-                    <TableCell key={j}>
-                      <Skeleton height={16} width="70%" />
-                    </TableCell>
+                    <TableCell key={j}><Skeleton height={16} width="70%" /></TableCell>
                   ))}
                 </TableRow>
               ))
@@ -116,25 +93,17 @@ export default function ProductList() {
               products.map((p) => (
                 <TableRow key={p._id}>
                   <TableCell>
-                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                      {p.customerId?.name}
-                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>{p.customerId?.name}</Typography>
                   </TableCell>
                   <TableCell>
-                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                      {p.productName}
-                    </Typography>
-                    <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                      {p.brand} {p.model}
-                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>{p.productName}</Typography>
+                    <Typography variant="caption" sx={{ color: "text.secondary" }}>{p.brand} {p.model}</Typography>
                   </TableCell>
                   <TableCell>
                     <Chip label={p.category} size="small" variant="outlined" sx={{ fontSize: "0.75rem" }} />
                   </TableCell>
                   <TableCell>
-                    <Typography variant="body2" sx={{ fontFamily: "monospace" }}>
-                      {p.customerId?.mobileNumber}
-                    </Typography>
+                    <Typography variant="body2" sx={{ fontFamily: "monospace" }}>{p.customerId?.mobileNumber}</Typography>
                   </TableCell>
                   <TableCell>
                     <Typography variant="body2" sx={{ color: "text.secondary" }}>
@@ -142,9 +111,7 @@ export default function ProductList() {
                     </Typography>
                   </TableCell>
                   <TableCell sx={{ textAlign: "right" }}>
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                      ₹{p.salePrice.toLocaleString()}
-                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>₹{p.salePrice.toLocaleString()}</Typography>
                   </TableCell>
                   <TableCell>
                     <Chip
@@ -199,7 +166,14 @@ export default function ProductList() {
           customerId={editing?.customerId?._id || ""}
           product={editing}
           onClose={() => { setFormOpen(false); setEditing(null); }}
-          onSaved={() => { setFormOpen(false); setEditing(null); load(); }}
+          onSaved={() => {
+            setFormOpen(false);
+            setEditing(null);
+            dispatch(setProductsLoading());
+            api.get('/products', { params: { page, limit: 10 } })
+              .then((res) => dispatch(setProductsList(res.data)))
+              .catch(() => dispatch(setProductsFailed()));
+          }}
         />
       )}
     </PageContainer>

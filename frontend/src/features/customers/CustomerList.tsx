@@ -1,23 +1,9 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Box,
-  Typography,
-  Button,
-  TextField,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  IconButton,
-  Pagination,
-  Skeleton,
-  InputAdornment,
-  Avatar,
-  Tooltip,
+  Box, Typography, Button, TextField, Table, TableBody, TableCell,
+  TableContainer, TableHead, TableRow, Paper, IconButton, Pagination,
+  Skeleton, InputAdornment, Avatar, Tooltip,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
@@ -26,71 +12,46 @@ import SearchIcon from "@mui/icons-material/Search";
 import api from "../../api/axios";
 import CustomerForm from "./CustomerForm";
 import PageContainer from "../../components/PageContainer";
+import { useAppDispatch, useAppSelector } from "../../store/hooks";
+import { store } from "../../store/index";
+import {
+  setCustomersLoading,
+  setCustomersList,
+  setCustomersFailed,
+} from "../../store/slices/customersSlice";
 
-interface Customer {
-  _id: string;
-  name: string;
-  mobileNumber: string;
-  alternateNumber?: string;
-  address: string;
-  notes?: string;
-}
-
-const AVATAR_COLORS = [
-  "#4F46E5",
-  "#0EA5E9",
-  "#10B981",
-  "#F59E0B",
-  "#EF4444",
-  "#8B5CF6",
-];
+const AVATAR_COLORS = ["#4F46E5", "#0EA5E9", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6"];
 const avatarColor = (name: string) =>
   AVATAR_COLORS[(name?.charCodeAt(0) || 0) % AVATAR_COLORS.length];
 const initials = (name: string) =>
-  name
-    ?.split(" ")
-    .map((w) => w[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
+  name?.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
 
 export default function CustomerList() {
   const navigate = useNavigate();
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [pages, setPages] = useState(1);
-  const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [formOpen, setFormOpen] = useState(false);
-  const [editing, setEditing] = useState<Customer | null>(null);
+  const dispatch = useAppDispatch();
+  const { list: customers, total, pages, status } = useAppSelector((s) => s.customers);
+  const loading = status !== "succeeded";
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await api.get("/customers", {
-        params: { page, limit: 10, search: search || undefined },
-      });
-      setCustomers(res.data.customers);
-      setTotal(res.data.total);
-      setPages(res.data.pages);
-    } finally {
-      setLoading(false);
-    }
-  }, [page, search]);
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<(typeof customers)[0] | null>(null);
+
+  const load = (p: number, s: string) => {
+    if (store.getState().customers.status === 'loading') return;
+    dispatch(setCustomersLoading());
+    api.get('/customers', { params: { page: p, limit: 10, search: s || undefined } })
+      .then((res) => dispatch(setCustomersList(res.data)))
+      .catch(() => dispatch(setCustomersFailed()));
+  };
 
   useEffect(() => {
-    load();
-  }, [load]);
+    load(page, search);
+  }, [page, search]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSearch = (val: string) => {
     setSearch(val);
     setPage(1);
-  };
-  const handleSaved = () => {
-    setFormOpen(false);
-    setEditing(null);
-    load();
   };
 
   return (
@@ -116,10 +77,7 @@ export default function CustomerList() {
           <Button
             variant="contained"
             startIcon={<AddIcon />}
-            onClick={() => {
-              setEditing(null);
-              setFormOpen(true);
-            }}
+            onClick={() => { setEditing(null); setFormOpen(true); }}
           >
             Add Customer
           </Button>
@@ -144,9 +102,7 @@ export default function CustomerList() {
               Array.from({ length: 6 }).map((_, i) => (
                 <TableRow key={i}>
                   <TableCell>
-                    <Box
-                      sx={{ display: "flex", alignItems: "center", gap: 1.5 }}
-                    >
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
                       <Skeleton variant="circular" width={32} height={32} />
                       <Box>
                         <Skeleton width={120} height={16} />
@@ -155,9 +111,7 @@ export default function CustomerList() {
                     </Box>
                   </TableCell>
                   {[1, 2, 3, 4].map((j) => (
-                    <TableCell key={j}>
-                      <Skeleton width="70%" height={16} />
-                    </TableCell>
+                    <TableCell key={j}><Skeleton width="70%" height={16} /></TableCell>
                   ))}
                 </TableRow>
               ))
@@ -165,19 +119,11 @@ export default function CustomerList() {
               <TableRow>
                 <TableCell colSpan={5}>
                   <Box sx={{ py: 5, textAlign: "center" }}>
-                    <Typography
-                      variant="body1"
-                      sx={{ fontWeight: 500, color: "text.secondary" }}
-                    >
+                    <Typography variant="body1" sx={{ fontWeight: 500, color: "text.secondary" }}>
                       No customers found
                     </Typography>
-                    <Typography
-                      variant="body2"
-                      sx={{ color: "text.secondary", mt: 0.5 }}
-                    >
-                      {search
-                        ? `No results for "${search}"`
-                        : "Add your first customer to get started"}
+                    <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.5 }}>
+                      {search ? `No results for "${search}"` : "Add your first customer to get started"}
                     </Typography>
                   </Box>
                 </TableCell>
@@ -186,54 +132,33 @@ export default function CustomerList() {
               customers.map((c) => (
                 <TableRow key={c._id}>
                   <TableCell>
-                    <Box
-                      sx={{ display: "flex", alignItems: "center", gap: 1.5 }}
-                    >
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
                       <Avatar
                         sx={{
-                          width: 32,
-                          height: 32,
-                          fontSize: "0.75rem",
-                          fontWeight: 700,
-                          bgcolor: avatarColor(c.name),
-                          flexShrink: 0,
+                          width: 32, height: 32, fontSize: "0.75rem",
+                          fontWeight: 700, bgcolor: avatarColor(c.name), flexShrink: 0,
                         }}
                       >
                         {initials(c.name)}
                       </Avatar>
-                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                        {c.name}
-                      </Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 500 }}>{c.name}</Typography>
                     </Box>
                   </TableCell>
                   <TableCell>
                     <Typography variant="body2">{c.mobileNumber}</Typography>
                   </TableCell>
                   <TableCell>
-                    <Typography
-                      variant="body2"
-                      sx={{ color: "text.secondary" }}
-                    >
+                    <Typography variant="body2" sx={{ color: "text.secondary" }}>
                       {c.alternateNumber || "—"}
                     </Typography>
                   </TableCell>
                   <TableCell sx={{ maxWidth: 220 }}>
-                    <Typography
-                      variant="body2"
-                      sx={{ color: "text.secondary" }}
-                      noWrap
-                    >
+                    <Typography variant="body2" sx={{ color: "text.secondary" }} noWrap>
                       {c.address}
                     </Typography>
                   </TableCell>
                   <TableCell sx={{ textAlign: "center" }}>
-                    <Box
-                      sx={{
-                        display: "flex",
-                        justifyContent: "center",
-                        gap: 0.5,
-                      }}
-                    >
+                    <Box sx={{ display: "flex", justifyContent: "center", gap: 0.5 }}>
                       <Tooltip title="View details" arrow>
                         <IconButton
                           size="small"
@@ -246,10 +171,7 @@ export default function CustomerList() {
                       <Tooltip title="Edit" arrow>
                         <IconButton
                           size="small"
-                          onClick={() => {
-                            setEditing(c);
-                            setFormOpen(true);
-                          }}
+                          onClick={() => { setEditing(c); setFormOpen(true); }}
                         >
                           <EditIcon fontSize="small" />
                         </IconButton>
@@ -278,11 +200,16 @@ export default function CustomerList() {
       <CustomerForm
         open={formOpen}
         customer={editing}
-        onClose={() => {
+        onClose={() => { setFormOpen(false); setEditing(null); }}
+        onSaved={() => {
           setFormOpen(false);
           setEditing(null);
+          // Force re-fetch after save by bypassing the loading guard
+          dispatch(setCustomersLoading());
+          api.get('/customers', { params: { page, limit: 10, search: search || undefined } })
+            .then((res) => dispatch(setCustomersList(res.data)))
+            .catch(() => dispatch(setCustomersFailed()));
         }}
-        onSaved={handleSaved}
       />
     </PageContainer>
   );
